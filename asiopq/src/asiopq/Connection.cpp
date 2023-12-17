@@ -4,6 +4,7 @@
 #include <asiopq/Connection.hpp>
 #include <asio/this_coro.hpp>
 #include <asio/use_awaitable.hpp>
+#include <asio/experimental/use_coro.hpp>
 
 namespace PC::asiopq
 {
