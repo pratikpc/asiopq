@@ -31,10 +31,10 @@ namespace PC::asiopq
       ~Connection();
 
       void connect(std::string_view connection_string);
-      asio::awaitable<void> connect_async(std::string_view connection_string);
+      asio::experimental::coro<void> connect_async(asio::any_io_executor &executor, std::string_view connection_string);
 
-      asio::awaitable<ResultsPtr> commands_async(std::string_view command);
-      asio::awaitable<ResultPtr> command_async(std::string_view command);
+      asio::experimental::coro<ResultPtr> commands_async(asio::any_io_executor &executor, std::string_view command);
+      asio::experimental::coro<void, ResultPtr> command_async(asio::any_io_executor &executor, std::string_view command);
 
       asio::experimental::coro<NotifyPtr> await_notify_async(asio::any_io_executor& executor);
 

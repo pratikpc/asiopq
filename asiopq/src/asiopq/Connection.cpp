@@ -1,6 +1,7 @@
 ﻿// lib.cpp : Defines the entry point for the application.
 //
 
+#include <asio/deferred.hpp>
 #include <asiopq/Connection.hpp>
 #include <asio/this_coro.hpp>
 #include <asio/use_awaitable.hpp>
@@ -23,46 +24,50 @@ namespace PC::asiopq
       while (true)
       {
          if (PQisBusy(conn) == 1)
-            co_await socket_pq.async_read_some(::asio::null_buffers(), use_coro);
+            co_await socket_pq.async_read_some(::asio::null_buffers(), ::asio::deferred);
          if (PQconsumeInput(conn) != 1)
             continue;
          auto result{PQnotifies(conn)};
-         if (result != nullptr)
-            co_yield result;
+         if (result == nullptr)
+            continue;
+         co_yield result;
       }
    }
 
-   asio::awaitable<ResultsPtr> Connection::commands_async(std::string_view command)
+   asio::experimental::coro<ResultPtr> Connection::commands_async(asio::any_io_executor &executor, std::string_view command)
    {
       // Returns 1 on success
       if (PQsendQuery(conn, std::data(command)) != 1)
-         co_return ResultsPtr{};
-      auto executor = co_await ::asio::this_coro::executor;
+      {
+         co_return;
+      }
       auto socket_pq = socket(executor);
-      ResultsPtr results;
       while (true)
       {
          if (PQisBusy(conn) == 1)
-            co_await socket_pq.async_read_some(::asio::null_buffers(), asio::use_awaitable);
+            co_await socket_pq.async_read_some(::asio::null_buffers(), asio::deferred);
          if (PQconsumeInput(conn) != 1)
-            co_return ResultsPtr{};
+            break;
          ResultPtr result{PQgetResult(conn)};
          if (not result)
             break;
-         results.push_back(std::move(result));
+         co_yield ::std::move(result);
       }
-
-      co_return results;
    }
 
-   asio::awaitable<ResultPtr> Connection::command_async(std::string_view command)
+   asio::experimental::coro<void, ResultPtr> Connection::command_async(asio::any_io_executor &executor, std::string_view command)
    {
-      ResultsPtr results = co_await commands_async(command);
-      if (std::empty(results))
-         co_return ResultPtr{};
-      ResultPtr result = std::move(results[0]);
-      results.clear();
-      co_return result;
+      ResultPtr res;
+      auto op = commands_async(executor, command);
+      while(auto val = co_await op)
+      {
+         if(not *val)
+         {
+            continue;
+         }
+         res = ::std::move(*val);
+      }
+      co_return ::std::move(res);
    }
    void Connection::connect(std::string_view connection_string)
    {
@@ -80,7 +85,7 @@ namespace PC::asiopq
       return conn;
    }
 
-   asio::awaitable<void> Connection::connect_async(std::string_view connection_string)
+   asio::experimental::coro<void> Connection::connect_async(asio::any_io_executor &executor, std::string_view connection_string)
    {
       conn = PQconnectStart(std::data(connection_string));
       if (status() == ConnStatusType::CONNECTION_BAD)
@@ -102,21 +107,19 @@ namespace PC::asiopq
          // If Read, wait for PQ to read from Socket
          case PostgresPollingStatusType::PGRES_POLLING_READING:
          {
-            auto executor = co_await asio::this_coro::executor;
             auto socket_pq = socket(executor);
             // Null buffers ensures we only wait
             // But do not end up reading anything
-            co_await socket_pq.async_read_some(asio::null_buffers{}, asio::use_awaitable);
+            co_await socket_pq.async_read_some(asio::null_buffers{}, asio::deferred);
          }
          break;
          // If Write, wait for PQ to write to socket
          case PostgresPollingStatusType::PGRES_POLLING_WRITING:
          {
-            auto executor = co_await asio::this_coro::executor;
             auto socket_pq = socket(executor);
             // Null buffers ensures we only wait
             // But do not end up reading anything
-            co_await socket_pq.async_write_some(asio::null_buffers{}, asio::use_awaitable);
+            co_await socket_pq.async_write_some(asio::null_buffers{}, asio::deferred);
          }
          break;
          }

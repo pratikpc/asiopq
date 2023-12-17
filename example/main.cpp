@@ -1,45 +1,53 @@
 ﻿// lib.cpp : Defines the entry point for the application.
 //
+#include <asio/any_io_executor.hpp>
+#include <asio/awaitable.hpp>
+#include <asio/this_coro.hpp>
+#include <asio/use_awaitable.hpp>
 #include <asiopq/Connection.hpp>
 #include <iostream>
 #include <asio/co_spawn.hpp>
 #include <asio/detached.hpp>
 
-asio::awaitable<void> DBConnect()
+asio::experimental::coro<void> DBConnect(::asio::any_io_executor& executor)
 {
 	using PC::asiopq::ResultPtr;
 	std::string connection_string{"postgresql://postgres:postgres@localhost:5432/postgres"};
 	{
 		PC::asiopq::Connection connection;
-		co_await connection.connect_async(connection_string);
+		co_await connection.connect_async(executor, connection_string);
 		if (connection.status() != ConnStatusType::CONNECTION_OK)
 			co_return;
 		{
-			auto const init_reses = co_await connection.commands_async("DROP TABLE IF EXISTS TBL1;DROP TABLE IF EXISTS TBL2; CREATE TABLE IF NOT EXISTS TBL1 (i int4);CREATE TABLE IF NOT EXISTS TBL2 (i int4);");
-			if (std::empty(init_reses))
-				co_return;
-
-			for (auto const &res : init_reses)
+			auto init_reses = connection.commands_async(executor, "DROP TABLE IF EXISTS TBL1;DROP TABLE IF EXISTS TBL2; CREATE TABLE IF NOT EXISTS TBL1 (i int4);CREATE TABLE IF NOT EXISTS TBL2 (i int4);");
+			while (auto res = co_await init_reses)
 			{
-				if (res.status() != PGRES_COMMAND_OK)
+				if(not res.has_value())
 				{
-					std::cout << res.status() << " : " << res.error_msg() << "\n";
+					continue;
+				}
+				if (res->status() != PGRES_COMMAND_OK)
+				{
+					std::cout << res->status() << " : " << res->error_msg() << "\n";
 					co_return;
 				}
 			}
 			std::cout << "Create was a success\n";
 		}
 		{
-			auto const insert_res = co_await connection.command_async("INSERT INTO TBL1 VALUES(25)");
-			std::cout << ((bool)insert_res) << insert_res.status() << " : " << connection.error_msg() << " : " << insert_res.error_msg() << "\n";
+			auto const insert_res = co_await connection.command_async(executor, "INSERT INTO TBL1 VALUES(25)");
+			std::cout << static_cast<bool>(insert_res) << " => " << insert_res.status() << " : " << connection.error_msg() << " : " << insert_res.error_msg() << "\n";
 			if (not insert_res or insert_res.status() != PGRES_COMMAND_OK)
 				co_return;
 			std::cout << "Insert was a success\n";
 		}
 		{
-			auto const result_set = co_await connection.command_async("SELECT * from TBL1");
+			auto const result_set = co_await connection.command_async(executor, "SELECT * from TBL1");
 			if (not result_set)
+			{
+				::std::cerr << "Select from Result set failed " << result_set.error_msg() << ::std::endl;
 				co_return;
+			}
 			if (result_set.status() != PGRES_TUPLES_OK)
 				co_return;
 			auto const row_count = result_set.row_count();
@@ -50,13 +58,11 @@ asio::awaitable<void> DBConnect()
 			}
 		}
 		{
-			co_await connection.command_async("LISTEN TBL1;");
-			auto executor = co_await asio::this_coro::executor;
+			co_await connection.command_async(executor, "LISTEN TBL1;");
 			auto notifies = connection.await_notify_async(executor);
-			for (std::size_t i = 0; i < 50; ++i)
+			while (auto notify_item = co_await notifies)
 			{
-				auto notify_item = ((co_await notifies.async_resume(asio::use_awaitable)).value());
-				std::cout << "Notify Rel " << notify_item->relname << " " << notify_item->extra << "\n";
+				std::cout << "Notify Rel " << (*notify_item)->relname << " " << (*notify_item)->extra << "\n";
 			}
 		}
 	}
@@ -67,6 +73,14 @@ asio::awaitable<void> DBConnect()
 	}
 	co_return;
 }
+
+asio::awaitable<void> DBConnect()
+{
+	auto executor = co_await ::asio::this_coro::executor;
+	auto op = DBConnect(executor);
+	co_return co_await op.async_resume(::asio::use_awaitable);
+}
+
 
 int main()
 {
