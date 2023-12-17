@@ -18,6 +18,21 @@ namespace PC::asiopq
       if (conn != nullptr)
          PQfinish(conn);
    }
+   asio::experimental::coro<NotifyPtr> Connection::await_notify_async(asio::any_io_executor& executor, ::std::string_view command)
+   {
+      {
+         auto const res = co_await command_async(executor, command);
+         if(not res)
+         {
+            co_return;
+         }
+      }
+      auto op = await_notify_async(executor);
+      while(auto val = co_await op)
+      {
+         co_yield ::std::move(*val);
+      }
+   }
    asio::experimental::coro<NotifyPtr> Connection::await_notify_async(asio::any_io_executor &executor)
    {
       using asio::experimental::use_coro;

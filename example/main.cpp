@@ -1,4 +1,4 @@
-﻿// lib.cpp : Defines the entry point for the application.
+// lib.cpp : Defines the entry point for the application.
 //
 #include <asio/any_io_executor.hpp>
 #include <asio/awaitable.hpp>
@@ -58,8 +58,7 @@ asio::experimental::coro<void> DBConnect(::asio::any_io_executor& executor)
 			}
 		}
 		{
-			co_await connection.command_async(executor, "LISTEN TBL1;");
-			auto notifies = connection.await_notify_async(executor);
+			auto notifies = connection.await_notify_async(executor, "LISTEN TBL1;");
 			while (auto notify_item = co_await notifies)
 			{
 				std::cout << "Notify Rel " << (*notify_item)->relname << " " << (*notify_item)->extra << "\n";

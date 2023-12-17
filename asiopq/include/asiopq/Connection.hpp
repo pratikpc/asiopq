@@ -37,6 +37,7 @@ namespace PC::asiopq
       asio::experimental::coro<void, ResultPtr> command_async(asio::any_io_executor &executor, std::string_view command);
 
       asio::experimental::coro<NotifyPtr> await_notify_async(asio::any_io_executor& executor);
+      asio::experimental::coro<NotifyPtr> await_notify_async(asio::any_io_executor& executor, ::std::string_view command);
 
       ConnStatusType status() const
       {
