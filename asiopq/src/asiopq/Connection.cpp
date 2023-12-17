@@ -1,4 +1,4 @@
-﻿// lib.cpp : Defines the entry point for the application.
+// lib.cpp : Defines the entry point for the application.
 //
 
 #include <asio/deferred.hpp>
@@ -6,6 +6,7 @@
 #include <asio/this_coro.hpp>
 #include <asio/use_awaitable.hpp>
 #include <asio/experimental/use_coro.hpp>
+#include <stdexcept>
 
 namespace PC::asiopq
 {
@@ -23,14 +24,20 @@ namespace PC::asiopq
       auto socket_pq = socket(executor);
       while (true)
       {
-         if (PQisBusy(conn) == 1)
-            co_await socket_pq.async_read_some(::asio::null_buffers(), ::asio::deferred);
+         co_await socket_pq.async_read_some(::asio::null_buffers(), ::asio::deferred);
          if (PQconsumeInput(conn) != 1)
             continue;
-         auto result{PQnotifies(conn)};
-         if (result == nullptr)
-            continue;
-         co_yield result;
+         while(true)
+         {
+            auto result{PQnotifies(conn)};
+            if (result == nullptr)
+               break;
+            if(PQconsumeInput(conn) != 1)
+            {
+               throw ::std::runtime_error("Unable to consume input");
+            }
+            co_yield result;
+         }
       }
    }
 
@@ -44,14 +51,18 @@ namespace PC::asiopq
       auto socket_pq = socket(executor);
       while (true)
       {
-         if (PQisBusy(conn) == 1)
-            co_await socket_pq.async_read_some(::asio::null_buffers(), asio::deferred);
+         co_await socket_pq.async_read_some(::asio::null_buffers(), asio::deferred);
          if (PQconsumeInput(conn) != 1)
-            break;
-         ResultPtr result{PQgetResult(conn)};
-         if (not result)
-            break;
-         co_yield ::std::move(result);
+         {
+            throw ::std::runtime_error("Unable to consume input");
+         }
+         while(::PQisBusy(conn) == 0)
+         {
+            ResultPtr result{PQgetResult(conn)};
+            if (not result)
+               co_return;
+            co_yield ::std::move(result);
+         }
       }
    }
 
@@ -98,10 +109,18 @@ namespace PC::asiopq
          {
          case PostgresPollingStatusType::PGRES_POLLING_OK:
          {
+            if(::PQsetnonblocking(conn, 1) != 0)
+            {
+               throw ::std::runtime_error("Unable to switch to Non-Blocking mode");
+            }
             co_return;
          }
          case PostgresPollingStatusType::PGRES_POLLING_FAILED:
          {
+            if(::PQsetnonblocking(conn, 1) != 0)
+            {
+               throw ::std::runtime_error("Unable to switch to Non-Blocking mode");
+            }
             co_return;
          }
          // If Read, wait for PQ to read from Socket
