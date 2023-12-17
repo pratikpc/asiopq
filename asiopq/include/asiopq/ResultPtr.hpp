@@ -14,6 +14,7 @@ namespace PC::asiopq
     public:
         explicit ResultPtr(PGresult *const ptr = nullptr) : ptr{ptr} {}
         ResultPtr(ResultPtr &&orig);
+        ResultPtr& operator=(ResultPtr &&orig);
         ~ResultPtr();
 
         explicit operator bool() const noexcept
