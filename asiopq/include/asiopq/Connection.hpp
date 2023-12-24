@@ -24,25 +24,23 @@ namespace PC::asiopq
    struct Connection
    {
     private:
-      PGconn* conn;
+      PGconn*                 conn;
+      ::asio::any_io_executor executor;
 
     public:
-      Connection();
+      explicit Connection(decltype(executor) executor);
       ~Connection();
 
+      ::asio::any_io_executor get_executor();
+
       void                           connect(std::string_view connection_string);
-      asio::experimental::coro<void> connect_async(asio::any_io_executor& executor,
-                                                   std::string_view connection_string);
+      asio::experimental::coro<void> connect_async(std::string_view connection_string);
 
-      asio::experimental::coro<ResultPtr> commands_async(asio::any_io_executor& executor,
-                                                         std::string_view       command);
-      asio::experimental::coro<void, ResultPtr>
-          command_async(asio::any_io_executor& executor, std::string_view command);
+      asio::experimental::coro<ResultPtr>       commands_async(std::string_view command);
+      asio::experimental::coro<void, ResultPtr> command_async(std::string_view command);
 
-      asio::experimental::coro<NotifyPtr>
-          await_notify_async(asio::any_io_executor& executor);
-      asio::experimental::coro<NotifyPtr>
-          await_notify_async(asio::any_io_executor& executor, ::std::string_view command);
+      asio::experimental::coro<NotifyPtr> await_notify_async();
+      asio::experimental::coro<NotifyPtr> await_notify_async(::std::string_view command);
 
       ConnStatusType status() const
       {
@@ -53,7 +51,7 @@ namespace PC::asiopq
          return PQerrorMessage(conn);
       }
       PGconn*       native_handle();
-      asiopq_socket socket(asio::any_io_executor& executor) const;
+      asiopq_socket socket();
 
     private:
       int dup_native_socket_handle() const;

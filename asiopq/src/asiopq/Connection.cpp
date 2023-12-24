@@ -7,37 +7,46 @@
 #include <asio/use_awaitable.hpp>
 #include <asiopq/Connection.hpp>
 #include <stdexcept>
+#include <utility>
 
 namespace PC::asiopq
 {
-   Connection::Connection() : conn(nullptr) {}
+   Connection::Connection(decltype(executor) executor) :
+       conn(nullptr), executor{::std::move(executor)}
+   {
+   }
+
    Connection::~Connection()
    {
       if (conn != nullptr)
          PQfinish(conn);
    }
+
+   ::asio::any_io_executor Connection::get_executor()
+   {
+      return executor;
+   }
+
    asio::experimental::coro<NotifyPtr>
-       Connection::await_notify_async(asio::any_io_executor& executor,
-                                      ::std::string_view     command)
+       Connection::await_notify_async(::std::string_view command)
    {
       {
-         auto const res = co_await command_async(executor, command);
+         auto const res = co_await command_async(command);
          if (not res)
          {
             co_return;
          }
       }
-      auto op = await_notify_async(executor);
+      auto op = await_notify_async();
       while (auto val = co_await op)
       {
          co_yield ::std::move(*val);
       }
    }
-   asio::experimental::coro<NotifyPtr>
-       Connection::await_notify_async(asio::any_io_executor& executor)
+   asio::experimental::coro<NotifyPtr> Connection::await_notify_async()
    {
       using asio::experimental::use_coro;
-      auto socket_pq = socket(executor);
+      auto socket_pq = socket();
       while (true)
       {
          co_await socket_pq.async_read_some(::asio::null_buffers(), ::asio::deferred);
@@ -58,15 +67,14 @@ namespace PC::asiopq
    }
 
    asio::experimental::coro<ResultPtr>
-       Connection::commands_async(asio::any_io_executor& executor,
-                                  std::string_view       command)
+       Connection::commands_async(std::string_view command)
    {
       // Returns 1 on success
       if (PQsendQuery(conn, std::data(command)) != 1)
       {
          co_return;
       }
-      auto socket_pq = socket(executor);
+      auto socket_pq = socket();
       while (true)
       {
          co_await socket_pq.async_read_some(::asio::null_buffers(), asio::deferred);
@@ -85,11 +93,10 @@ namespace PC::asiopq
    }
 
    asio::experimental::coro<void, ResultPtr>
-       Connection::command_async(asio::any_io_executor& executor,
-                                 std::string_view       command)
+       Connection::command_async(std::string_view command)
    {
       ResultPtr res;
-      auto      op = commands_async(executor, command);
+      auto      op = commands_async(command);
       while (auto val = co_await op)
       {
          if (not *val)
@@ -105,10 +112,10 @@ namespace PC::asiopq
       conn = PQconnectdb(std::data(connection_string));
    }
 
-   asiopq_socket Connection::socket(asio::any_io_executor& executor) const
+   asiopq_socket Connection::socket()
    {
       auto const socket_fd = dup_native_socket_handle();
-      return asiopq_socket{executor, {}, socket_fd};
+      return asiopq_socket{get_executor(), {}, socket_fd};
    }
 
    PGconn* Connection::native_handle()
@@ -117,8 +124,7 @@ namespace PC::asiopq
    }
 
    asio::experimental::coro<void>
-       Connection::connect_async(asio::any_io_executor& executor,
-                                 std::string_view       connection_string)
+       Connection::connect_async(std::string_view connection_string)
    {
       conn = PQconnectStart(std::data(connection_string));
       if (status() == ConnStatusType::CONNECTION_BAD)
@@ -148,7 +154,7 @@ namespace PC::asiopq
             // If Read, wait for PQ to read from Socket
             case PostgresPollingStatusType::PGRES_POLLING_READING:
             {
-               auto socket_pq = socket(executor);
+               auto socket_pq = socket();
                // Null buffers ensures we only wait
                // But do not end up reading anything
                co_await socket_pq.async_read_some(asio::null_buffers{}, asio::deferred);
@@ -157,7 +163,7 @@ namespace PC::asiopq
             // If Write, wait for PQ to write to socket
             case PostgresPollingStatusType::PGRES_POLLING_WRITING:
             {
-               auto socket_pq = socket(executor);
+               auto socket_pq = socket();
                // Null buffers ensures we only wait
                // But do not end up reading anything
                co_await socket_pq.async_write_some(asio::null_buffers{}, asio::deferred);
