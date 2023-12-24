@@ -1,11 +1,11 @@
 // lib.cpp : Defines the entry point for the application.
 //
 
-#include <asio/deferred.hpp>
-#include <asio/experimental/use_coro.hpp>
-#include <asio/this_coro.hpp>
-#include <asio/use_awaitable.hpp>
 #include <asiopq/Connection.hpp>
+#include <boost/asio/deferred.hpp>
+#include <boost/asio/experimental/use_coro.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <stdexcept>
 #include <utility>
 
@@ -22,12 +22,12 @@ namespace PC::asiopq
          PQfinish(conn);
    }
 
-   ::asio::any_io_executor Connection::get_executor()
+   ::boost::asio::any_io_executor Connection::get_executor()
    {
       return executor;
    }
 
-   asio::experimental::coro<NotifyPtr>
+   boost::asio::experimental::coro<NotifyPtr>
        Connection::await_notify_async(::std::string_view command)
    {
       {
@@ -43,13 +43,14 @@ namespace PC::asiopq
          co_yield ::std::move(*val);
       }
    }
-   asio::experimental::coro<NotifyPtr> Connection::await_notify_async()
+   boost::asio::experimental::coro<NotifyPtr> Connection::await_notify_async()
    {
-      using asio::experimental::use_coro;
+      using boost::asio::experimental::use_coro;
       auto socket_pq = socket();
       while (true)
       {
-         co_await socket_pq.async_read_some(::asio::null_buffers(), ::asio::deferred);
+         co_await socket_pq.async_read_some(::boost::asio::null_buffers(),
+                                            ::boost::asio::deferred);
          if (PQconsumeInput(conn) != 1)
             continue;
          while (true)
@@ -66,7 +67,7 @@ namespace PC::asiopq
       }
    }
 
-   asio::experimental::coro<ResultPtr>
+   boost::asio::experimental::coro<ResultPtr>
        Connection::commands_async(std::string_view command)
    {
       // Returns 1 on success
@@ -77,7 +78,8 @@ namespace PC::asiopq
       auto socket_pq = socket();
       while (true)
       {
-         co_await socket_pq.async_read_some(::asio::null_buffers(), asio::deferred);
+         co_await socket_pq.async_read_some(::boost::asio::null_buffers(),
+                                            boost::asio::deferred);
          if (PQconsumeInput(conn) != 1)
          {
             throw ::std::runtime_error("Unable to consume input");
@@ -92,7 +94,7 @@ namespace PC::asiopq
       }
    }
 
-   asio::experimental::coro<void, ResultPtr>
+   boost::asio::experimental::coro<void, ResultPtr>
        Connection::command_async(std::string_view command)
    {
       ResultPtr res;
@@ -123,7 +125,7 @@ namespace PC::asiopq
       return conn;
    }
 
-   asio::experimental::coro<void>
+   boost::asio::experimental::coro<void>
        Connection::connect_async(std::string_view connection_string)
    {
       conn = PQconnectStart(std::data(connection_string));
@@ -157,7 +159,8 @@ namespace PC::asiopq
                auto socket_pq = socket();
                // Null buffers ensures we only wait
                // But do not end up reading anything
-               co_await socket_pq.async_read_some(asio::null_buffers{}, asio::deferred);
+               co_await socket_pq.async_read_some(boost::asio::null_buffers{},
+                                                  boost::asio::deferred);
             }
             break;
             // If Write, wait for PQ to write to socket
@@ -166,7 +169,8 @@ namespace PC::asiopq
                auto socket_pq = socket();
                // Null buffers ensures we only wait
                // But do not end up reading anything
-               co_await socket_pq.async_write_some(asio::null_buffers{}, asio::deferred);
+               co_await socket_pq.async_write_some(boost::asio::null_buffers{},
+                                                   boost::asio::deferred);
             }
             break;
          }

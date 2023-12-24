@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include <asio/any_io_executor.hpp>
-#include <asio/awaitable.hpp>
-#include <asio/experimental/coro.hpp>
-#include <asio/local/stream_protocol.hpp>
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/experimental/coro.hpp>
+#include <boost/asio/local/stream_protocol.hpp>
 #include <libpq-fe.h>
 #include <string_view>
 
@@ -18,29 +18,32 @@ namespace PC::asiopq
    using ResultsPtr = std::vector<ResultPtr>;
    namespace
    {
-      using asio::local::stream_protocol;
+      using boost::asio::local::stream_protocol;
       using asiopq_socket = stream_protocol::socket;
    } // namespace
    struct Connection
    {
     private:
-      PGconn*                 conn;
-      ::asio::any_io_executor executor;
+      PGconn*                        conn;
+      ::boost::asio::any_io_executor executor;
 
     public:
       explicit Connection(decltype(executor) executor);
       ~Connection();
 
-      ::asio::any_io_executor get_executor();
+      ::boost::asio::any_io_executor get_executor();
 
-      void                           connect(std::string_view connection_string);
-      asio::experimental::coro<void> connect_async(std::string_view connection_string);
+      void connect(std::string_view connection_string);
+      boost::asio::experimental::coro<void>
+          connect_async(std::string_view connection_string);
 
-      asio::experimental::coro<ResultPtr>       commands_async(std::string_view command);
-      asio::experimental::coro<void, ResultPtr> command_async(std::string_view command);
+      boost::asio::experimental::coro<ResultPtr> commands_async(std::string_view command);
+      boost::asio::experimental::coro<void, ResultPtr>
+          command_async(std::string_view command);
 
-      asio::experimental::coro<NotifyPtr> await_notify_async();
-      asio::experimental::coro<NotifyPtr> await_notify_async(::std::string_view command);
+      boost::asio::experimental::coro<NotifyPtr> await_notify_async();
+      boost::asio::experimental::coro<NotifyPtr>
+          await_notify_async(::std::string_view command);
 
       ConnStatusType status() const
       {

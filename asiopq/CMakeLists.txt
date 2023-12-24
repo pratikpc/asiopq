@@ -7,7 +7,7 @@ project(asiopq
 	VERSION 1.0
 	LANGUAGES CXX)
 
-find_package(asio CONFIG REQUIRED)
+find_package(Boost REQUIRED)
 find_package(PostgreSQL REQUIRED)
 # Add source to this project's executable.
 add_library (${PROJECT_NAME} STATIC)
@@ -35,7 +35,7 @@ target_compile_features(${PROJECT_NAME}
 
 target_link_libraries(${PROJECT_NAME} 
 	PUBLIC
-		asio::asio
+		Boost::boost
 		PostgreSQL::PostgreSQL
 )
 

@@ -1,16 +1,16 @@
 // lib.cpp : Defines the entry point for the application.
 //
-#include <asio/any_io_executor.hpp>
-#include <asio/awaitable.hpp>
-#include <asio/co_spawn.hpp>
-#include <asio/detached.hpp>
-#include <asio/experimental/co_spawn.hpp>
-#include <asio/this_coro.hpp>
-#include <asio/use_awaitable.hpp>
 #include <asiopq/Connection.hpp>
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/experimental/co_spawn.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <iostream>
 
-asio::experimental::coro<void> DBConnect(::asio::any_io_executor executor)
+boost::asio::experimental::coro<void> DBConnect(::boost::asio::any_io_executor executor)
 {
    using PC::asiopq::ResultPtr;
    std::string connection_string{
@@ -85,8 +85,9 @@ asio::experimental::coro<void> DBConnect(::asio::any_io_executor executor)
 
 int main()
 {
-   asio::io_context io_context;
-   asio::experimental::co_spawn(DBConnect(io_context.get_executor()), asio::detached);
+   boost::asio::io_context io_context;
+   boost::asio::experimental::co_spawn(DBConnect(io_context.get_executor()),
+                                       boost::asio::detached);
    io_context.run();
    return 0;
 }
