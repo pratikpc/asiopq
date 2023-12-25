@@ -65,6 +65,35 @@ boost::cobalt::task<void> DBConnect(::std::string                connection_stri
             std::cout << "Row " << row << " : " << result_set(0, row).as<int>() << "\n";
          }
       }
+      /// @note Stream selection
+      {
+         auto results_it = connection.stream_async("SELECT * from TBL1");
+         BOOST_COBALT_FOR(auto result_set, results_it)
+         {
+            /// @note This reaches the final step
+            if (not result_set)
+            {
+               break;
+            }
+            auto const status = result_set.status();
+            if (status == PGRES_TUPLES_OK)
+               continue;
+            if (status == PGRES_SINGLE_TUPLE)
+            {
+               auto const row_count = result_set.row_count();
+               std::cout << "Stream Select table Row Count" << row_count << "\n";
+               for (int row = 0; row < row_count; ++row)
+               {
+                  std::cout << "Stream Row " << row << " : "
+                            << result_set(0, row).as<int>() << "\n";
+               }
+            }
+            else
+            {
+               throw ::std::runtime_error("Unable to process data");
+            }
+         }
+      }
       {
          for (auto const& listen : listens)
          {

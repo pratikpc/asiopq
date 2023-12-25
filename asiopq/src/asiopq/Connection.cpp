@@ -11,6 +11,7 @@
 #include <boost/cobalt/promise.hpp>
 #include <boost/cobalt/this_coro.hpp>
 #include <boost/cobalt/this_thread.hpp>
+#include <libpq-fe.h>
 #include <memory>
 #include <stdexcept>
 #include <utility>
@@ -106,6 +107,26 @@ namespace PC::asiopq
       if (PQsendQuery(conn, std::data(command)) != 1)
       {
          throw ::std::invalid_argument("Send Query failed");
+      }
+      auto op = wait_for_response();
+      BOOST_COBALT_FOR(auto res, op)
+      {
+         co_yield ::std::move(res);
+      }
+      co_return co_await op;
+   }
+
+   boost::cobalt::generator<ResultPtr> Connection::stream_async(std::string_view command)
+   {
+      // Returns 1 on success
+      if (PQsendQuery(conn, std::data(command)) != 1)
+      {
+         throw ::std::invalid_argument("Send Query failed");
+      }
+      // Returns 1 on success
+      if (::PQsetSingleRowMode(conn) != 1)
+      {
+         throw ::std::invalid_argument("Set Single Row Mode failed");
       }
       auto op = wait_for_response();
       BOOST_COBALT_FOR(auto res, op)

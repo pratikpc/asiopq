@@ -31,6 +31,7 @@ namespace PC::asiopq
       boost::cobalt::promise<void> connect_async(std::string_view connection_string);
 
       boost::cobalt::generator<ResultPtr> commands_async(std::string_view command);
+      boost::cobalt::generator<ResultPtr> stream_async(std::string_view command);
       boost::cobalt::promise<ResultPtr>   command_async(std::string_view command);
       /// @note Use this function to wait for a response after sending a request
       boost::cobalt::generator<ResultPtr> wait_for_response();
