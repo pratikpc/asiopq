@@ -27,6 +27,8 @@ target_sources(${PROJECT_NAME}
 	src/asiopq/ValuePtr.cpp
 	include/asiopq/NotifyPtr.hpp
 	include/asiopq/PQMemory.hpp
+	include/asiopq/Pipeline.hpp
+	src/asiopq/Pipeline.cpp
 )
 
 target_compile_features(${PROJECT_NAME}

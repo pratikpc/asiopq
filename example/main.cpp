@@ -1,6 +1,7 @@
 // lib.cpp : Defines the entry point for the application.
 //
 #include <asiopq/Connection.hpp>
+#include <asiopq/Pipeline.hpp>
 #include <boost/cobalt/async_for.hpp>
 #include <boost/cobalt/join.hpp>
 #include <boost/cobalt/run.hpp>
@@ -47,6 +48,43 @@ boost::cobalt::task<void> DBConnect(::std::string                connection_stri
          if (not insert_res or insert_res.status() != PGRES_COMMAND_OK)
             co_return;
          std::cout << "Insert was a success\n";
+      }
+      {
+         ::PC::asiopq::Pipeline pipeline{connection};
+         if (not pipeline.enter())
+         {
+            throw ::std::runtime_error("Unable to enter Pipeline mode");
+         }
+         for (::std::size_t i = 0; i < 20; ++i)
+         {
+            ::std::string command{"INSERT INTO TBL1 VALUES(18)"};
+            if (PQsendQueryParams(pipeline->native_handle(),
+                                  std::data(command),
+                                  0,
+                                  nullptr,
+                                  nullptr,
+                                  nullptr,
+                                  nullptr,
+                                  0) != 1)
+            {
+               throw ::std::invalid_argument("Send Query failed");
+            }
+         }
+         auto init_reses = pipeline.async_wait();
+         BOOST_COBALT_FOR(auto res, init_reses)
+         {
+            if (not res)
+            {
+               break;
+            }
+            if (res.status() != PGRES_COMMAND_OK)
+            {
+               std::cout << "Pipeline  ERROR " << res.status() << " : " << res.error_msg()
+                         << " : " << pipeline->error_msg() << "\n";
+               co_return;
+            }
+         }
+         std::cout << "Pipeline Insert was a success\n";
       }
       {
          auto const result_set = co_await connection.command_async("SELECT * from TBL1");
