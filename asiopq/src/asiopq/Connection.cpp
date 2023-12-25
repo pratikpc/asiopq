@@ -46,7 +46,7 @@ namespace PC::asiopq
       {
          co_yield ::std::move(val);
       }
-      co_yield NotifyPtr{};
+      co_return co_await op;
    }
    boost::cobalt::generator<NotifyPtr> Connection::await_notify_async()
    {
@@ -71,7 +71,7 @@ namespace PC::asiopq
             co_yield result;
          }
       }
-      co_yield NotifyPtr{};
+      co_return NotifyPtr{};
    }
 
    boost::cobalt::generator<ResultPtr>
