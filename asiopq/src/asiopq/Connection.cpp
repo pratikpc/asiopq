@@ -3,6 +3,7 @@
 
 #include <asiopq/Connection.hpp>
 #include <asiopq/NotifyPtr.hpp>
+#include <asiopq/ResultPtr.hpp>
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/cobalt/async_for.hpp>
@@ -213,6 +214,31 @@ namespace PC::asiopq
             break;
          }
       }
+   }
+
+   boost::cobalt::promise<ResultPtr>
+       Connection::exec_cmmand_without_completion_wait(::std::string_view command)
+   {
+      // Returns 1 on success
+      if (PQsendQuery(conn, std::data(command)) != 1)
+      {
+         throw ::std::invalid_argument("Send Query failed");
+      }
+      while (true)
+      {
+         co_await wait_for_read_async();
+         if (PQconsumeInput(conn) != 1)
+         {
+            throw ::std::runtime_error("Unable to consume input");
+         }
+         while (::PQisBusy(conn) == 0)
+         {
+            auto* const ptr = PQgetResult(conn);
+            ResultPtr   result{ptr};
+            co_return ::std::move(result);
+         }
+      }
+      co_return ResultPtr{nullptr};
    }
 
    int Connection::dup_native_socket_handle() const

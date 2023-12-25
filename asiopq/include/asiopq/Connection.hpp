@@ -1,4 +1,4 @@
-﻿// lib.h : Include file for standard system include files,
+// lib.h : Include file for standard system include files,
 // or project specific include files.
 
 #pragma once
@@ -51,6 +51,9 @@ namespace PC::asiopq
       PGconn* native_handle();
 
     private:
+      boost::cobalt::promise<ResultPtr>
+          exec_cmmand_without_completion_wait(::std::string_view command);
+
       int dup_native_socket_handle() const;
    };
 } // namespace PC::asiopq
