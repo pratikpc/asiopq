@@ -1,4 +1,4 @@
-﻿// lib.h : Include file for standard system include files,
+// lib.h : Include file for standard system include files,
 // or project specific include files.
 
 #pragma once
@@ -14,7 +14,6 @@
 
 namespace PC::asiopq
 {
-   using ResultsPtr = std::vector<ResultPtr>;
    namespace
    {
       using boost::asio::local::stream_protocol;
