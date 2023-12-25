@@ -1,4 +1,4 @@
-﻿# CMakeList.txt : CMake project for lib, include source and define
+# CMakeList.txt : CMake project for lib, include source and define
 # project specific logic here.
 #
 cmake_minimum_required (VERSION 3.8)
@@ -26,7 +26,7 @@ target_sources(${PROJECT_NAME}
 	include/asiopq/ValuePtr.hpp
 	src/asiopq/ValuePtr.cpp
 	include/asiopq/NotifyPtr.hpp
-	src/asiopq/NotifyPtr.cpp
+	include/asiopq/PQMemory.hpp
 )
 
 target_compile_features(${PROJECT_NAME}
