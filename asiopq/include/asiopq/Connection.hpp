@@ -29,6 +29,7 @@ namespace PC::asiopq
 
       void                         connect(std::string_view connection_string);
       boost::cobalt::promise<void> connect_async(std::string_view connection_string);
+      boost::cobalt::promise<void> wait_for_read_async();
 
       boost::cobalt::generator<ResultPtr> commands_async(std::string_view command);
       boost::cobalt::generator<ResultPtr> stream_async(std::string_view command);

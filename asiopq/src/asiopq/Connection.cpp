@@ -55,8 +55,7 @@ namespace PC::asiopq
    {
       while (true)
       {
-         co_await socket->async_read_some(::boost::asio::null_buffers(),
-                                          ::boost::cobalt::use_op);
+         co_await wait_for_read_async();
          if (PQconsumeInput(conn) != 1)
          {
             throw ::std::runtime_error("Unable to consume input");
@@ -80,8 +79,7 @@ namespace PC::asiopq
    {
       while (true)
       {
-         co_await socket->async_read_some(::boost::asio::null_buffers(),
-                                          boost::cobalt::use_op);
+         co_await wait_for_read_async();
          if (PQconsumeInput(conn) != 1)
          {
             throw ::std::runtime_error("Unable to consume input");
@@ -156,6 +154,14 @@ namespace PC::asiopq
       return conn;
    }
 
+   boost::cobalt::promise<void> Connection::wait_for_read_async()
+   {
+      // Null buffers ensures we only wait
+      // But do not end up reading anything
+      co_await socket->async_read_some(boost::asio::null_buffers{},
+                                       boost::cobalt::use_op);
+   }
+
    boost::cobalt::promise<void>
        Connection::connect_async(std::string_view connection_string)
    {
@@ -191,8 +197,7 @@ namespace PC::asiopq
                                       dup_native_socket_handle());
                // Null buffers ensures we only wait
                // But do not end up reading anything
-               co_await socket->async_read_some(boost::asio::null_buffers{},
-                                                boost::cobalt::use_op);
+               co_await wait_for_read_async();
             }
             break;
             // If Write, wait for PQ to write to socket
