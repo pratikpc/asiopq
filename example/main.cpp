@@ -132,6 +132,18 @@ boost::cobalt::task<void> DBConnect(::std::string                connection_stri
             }
          }
       }
+      /// @note Copy Command
+      {
+         auto results =
+             connection.copy_from_db("COPY (SELECT * from tbl1) TO STDOUT WITH CSV");
+         BOOST_COBALT_FOR(auto result, results)
+         {
+            if (not result)
+               continue;
+            ::std::cout << "Received from Result Data " << *result << '\n';
+         }
+         ::std::cout << "Begin waiting for final completion\n" << ::std::flush;
+      }
       {
          for (auto const& listen : listens)
          {

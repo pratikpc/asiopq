@@ -3,6 +3,7 @@
 
 #include <asiopq/Connection.hpp>
 #include <asiopq/NotifyPtr.hpp>
+#include <asiopq/PQMemory.hpp>
 #include <asiopq/ResultPtr.hpp>
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/buffer.hpp>
@@ -239,6 +240,73 @@ namespace PC::asiopq
          }
       }
       co_return ResultPtr{nullptr};
+   }
+
+   boost::cobalt::generator<PQMemory<char> /*Buffer*/>
+       Connection::copy_from_db(::std::string_view command)
+   {
+      /// @note First execute the query
+      {
+         auto result = co_await exec_cmmand_without_completion_wait(command);
+         if (result.status() != PGRES_COPY_OUT)
+         {
+            throw ::std::runtime_error("Copy Command executed in wrong mode");
+         }
+      }
+      using Result = PQMemory<char>;
+      while (true)
+      {
+         // if (PQconsumeInput(conn) != 1)
+         // {
+         //    throw ::std::runtime_error("Unable to consume input");
+         // }
+         Result     result;
+         auto const sz = PQgetCopyData(native_handle(), result.ref_ptr(), true /*Async*/);
+         /// @note A result of -1 indicates the copy is over
+         /// @note https://www.postgresql.org/docs/current/libpq-copy.html
+         if (sz == -1)
+         {
+            break;
+         }
+         /// @note A result of -2 indicates an error
+         /// @note https://www.postgresql.org/docs/current/libpq-copy.html
+         if (sz == -2)
+         {
+            throw ::std::runtime_error("Unable to copy data");
+         }
+         /// @note Returns 0 in async if no data is available for immediate return
+         if (sz == 0)
+         {
+            co_await wait_for_read_async();
+            continue;
+         }
+         if (not result)
+         {
+            continue;
+         }
+         co_yield ::std::move(result);
+      }
+      /// @note Need to wait for final result
+      while (true)
+      {
+         if (::PQisBusy(conn) == 1)
+            co_await wait_for_read_async();
+         if (PQconsumeInput(conn) != 1)
+         {
+            throw ::std::runtime_error("Unable to consume input");
+         }
+         while (::PQisBusy(conn) == 0)
+         {
+            using ::PC::asiopq::ResultPtr;
+            auto* const ptr = PQgetResult(conn);
+            ResultPtr   result{ptr};
+            if (not result)
+            {
+               co_return Result{};
+            }
+         }
+      }
+      co_return Result{};
    }
 
    int Connection::dup_native_socket_handle() const

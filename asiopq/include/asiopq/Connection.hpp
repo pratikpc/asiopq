@@ -1,4 +1,4 @@
-// lib.h : Include file for standard system include files,
+﻿// lib.h : Include file for standard system include files,
 // or project specific include files.
 
 #pragma once
@@ -11,6 +11,7 @@
 #include <string_view>
 
 #include <asiopq/NotifyPtr.hpp>
+#include <asiopq/PQMemory.hpp>
 #include <asiopq/ResultPtr.hpp>
 
 namespace PC::asiopq
@@ -39,6 +40,9 @@ namespace PC::asiopq
 
       boost::cobalt::generator<NotifyPtr> await_notify_async();
       boost::cobalt::generator<NotifyPtr> await_notify_async(::std::string_view command);
+
+      boost::cobalt::generator<PQMemory<char> /*Buffer*/>
+          copy_from_db(::std::string_view command);
 
       ConnStatusType status() const
       {
