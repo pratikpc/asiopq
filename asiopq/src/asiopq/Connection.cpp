@@ -75,14 +75,8 @@ namespace PC::asiopq
       co_return NotifyPtr{};
    }
 
-   boost::cobalt::generator<ResultPtr>
-       Connection::commands_async(std::string_view command)
+   boost::cobalt::generator<ResultPtr> Connection::wait_for_response()
    {
-      // Returns 1 on success
-      if (PQsendQuery(conn, std::data(command)) != 1)
-      {
-         throw ::std::invalid_argument("Send Query failed");
-      }
       while (true)
       {
          co_await socket->async_read_some(::boost::asio::null_buffers(),
@@ -103,6 +97,22 @@ namespace PC::asiopq
          }
       }
       co_return ResultPtr{nullptr};
+   }
+
+   boost::cobalt::generator<ResultPtr>
+       Connection::commands_async(std::string_view command)
+   {
+      // Returns 1 on success
+      if (PQsendQuery(conn, std::data(command)) != 1)
+      {
+         throw ::std::invalid_argument("Send Query failed");
+      }
+      auto op = wait_for_response();
+      BOOST_COBALT_FOR(auto res, op)
+      {
+         co_yield ::std::move(res);
+      }
+      co_return co_await op;
    }
 
    boost::cobalt::promise<ResultPtr> Connection::command_async(std::string_view command)
