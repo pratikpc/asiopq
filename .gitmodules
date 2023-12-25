@@ -1,4 +1,0 @@
-[submodule "vcpkg"]
-	path = vcpkg
-	url = https://github.com/yurybura/vcpkg
-	branch = boost-1.84.0
