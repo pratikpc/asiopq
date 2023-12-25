@@ -3,10 +3,9 @@
 
 #pragma once
 
-#include <boost/asio/any_io_executor.hpp>
-#include <boost/asio/awaitable.hpp>
-#include <boost/asio/experimental/coro.hpp>
 #include <boost/asio/local/stream_protocol.hpp>
+#include <boost/cobalt/generator.hpp>
+#include <boost/cobalt/promise.hpp>
 #include <libpq-fe.h>
 #include <string_view>
 
@@ -24,26 +23,20 @@ namespace PC::asiopq
    struct Connection
    {
     private:
-      PGconn*                        conn;
-      ::boost::asio::any_io_executor executor;
+      PGconn* conn;
 
     public:
-      explicit Connection(decltype(executor) executor);
+      Connection();
       ~Connection();
 
-      ::boost::asio::any_io_executor get_executor();
+      void                         connect(std::string_view connection_string);
+      boost::cobalt::promise<void> connect_async(std::string_view connection_string);
 
-      void connect(std::string_view connection_string);
-      boost::asio::experimental::coro<void>
-          connect_async(std::string_view connection_string);
+      boost::cobalt::generator<ResultPtr> commands_async(std::string_view command);
+      boost::cobalt::promise<ResultPtr>   command_async(std::string_view command);
 
-      boost::asio::experimental::coro<ResultPtr> commands_async(std::string_view command);
-      boost::asio::experimental::coro<void, ResultPtr>
-          command_async(std::string_view command);
-
-      boost::asio::experimental::coro<NotifyPtr> await_notify_async();
-      boost::asio::experimental::coro<NotifyPtr>
-          await_notify_async(::std::string_view command);
+      boost::cobalt::generator<NotifyPtr> await_notify_async();
+      boost::cobalt::generator<NotifyPtr> await_notify_async(::std::string_view command);
 
       ConnStatusType status() const
       {
@@ -53,8 +46,7 @@ namespace PC::asiopq
       {
          return PQerrorMessage(conn);
       }
-      PGconn*       native_handle();
-      asiopq_socket socket();
+      PGconn* native_handle();
 
     private:
       int dup_native_socket_handle() const;

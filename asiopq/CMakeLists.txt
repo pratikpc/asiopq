@@ -7,8 +7,9 @@ project(asiopq
 	VERSION 1.0
 	LANGUAGES CXX)
 
-find_package(Boost REQUIRED)
+find_package(Boost COMPONENTS REQUIRED)
 find_package(PostgreSQL REQUIRED)
+find_package(Threads REQUIRED)
 # Add source to this project's executable.
 add_library (${PROJECT_NAME} STATIC)
 
@@ -36,7 +37,9 @@ target_compile_features(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME} 
 	PUBLIC
 		Boost::boost
+		Boost::cobalt
 		PostgreSQL::PostgreSQL
+		Threads::Threads
 )
 
 # TODO: Add tests and install targets if needed.

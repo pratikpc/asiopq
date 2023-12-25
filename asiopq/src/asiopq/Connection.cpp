@@ -2,19 +2,28 @@
 //
 
 #include <asiopq/Connection.hpp>
-#include <boost/asio/deferred.hpp>
-#include <boost/asio/experimental/use_coro.hpp>
-#include <boost/asio/this_coro.hpp>
-#include <boost/asio/use_awaitable.hpp>
+#include <asiopq/NotifyPtr.hpp>
+#include <boost/asio/buffer.hpp>
+#include <boost/cobalt/async_for.hpp>
+#include <boost/cobalt/generator.hpp>
+#include <boost/cobalt/op.hpp>
+#include <boost/cobalt/promise.hpp>
+#include <boost/cobalt/this_thread.hpp>
 #include <stdexcept>
 #include <utility>
 
 namespace PC::asiopq
 {
-   Connection::Connection(decltype(executor) executor) :
-       conn(nullptr), executor{::std::move(executor)}
+
+   namespace
    {
-   }
+      inline asiopq_socket socket(int const socket_fd)
+      {
+         // auto const socket_fd = dup_native_socket_handle();
+         return asiopq_socket{boost::cobalt::this_thread::get_executor(), {}, socket_fd};
+      }
+   } // namespace
+   Connection::Connection() : conn(nullptr) {}
 
    Connection::~Connection()
    {
@@ -22,37 +31,34 @@ namespace PC::asiopq
          PQfinish(conn);
    }
 
-   ::boost::asio::any_io_executor Connection::get_executor()
-   {
-      return executor;
-   }
-
-   boost::asio::experimental::coro<NotifyPtr>
+   boost::cobalt::generator<NotifyPtr>
        Connection::await_notify_async(::std::string_view command)
    {
       {
          auto const res = co_await command_async(command);
          if (not res)
          {
-            co_return;
+            throw ::std::invalid_argument("Unable to run the Notify command");
          }
       }
       auto op = await_notify_async();
-      while (auto val = co_await op)
+      BOOST_COBALT_FOR(auto val, op)
       {
-         co_yield ::std::move(*val);
+         co_yield ::std::move(val);
       }
+      co_yield NotifyPtr{};
    }
-   boost::asio::experimental::coro<NotifyPtr> Connection::await_notify_async()
+   boost::cobalt::generator<NotifyPtr> Connection::await_notify_async()
    {
-      using boost::asio::experimental::use_coro;
-      auto socket_pq = socket();
+      auto socket_pq = socket(dup_native_socket_handle());
       while (true)
       {
          co_await socket_pq.async_read_some(::boost::asio::null_buffers(),
-                                            ::boost::asio::deferred);
+                                            ::boost::cobalt::use_op);
          if (PQconsumeInput(conn) != 1)
-            continue;
+         {
+            throw ::std::runtime_error("Unable to consume input");
+         }
          while (true)
          {
             auto result{PQnotifies(conn)};
@@ -65,47 +71,47 @@ namespace PC::asiopq
             co_yield result;
          }
       }
+      co_yield NotifyPtr{};
    }
 
-   boost::asio::experimental::coro<ResultPtr>
+   boost::cobalt::generator<ResultPtr>
        Connection::commands_async(std::string_view command)
    {
       // Returns 1 on success
       if (PQsendQuery(conn, std::data(command)) != 1)
       {
-         co_return;
+         throw ::std::invalid_argument("Send Query failed");
       }
-      auto socket_pq = socket();
+      auto socket_pq = socket(dup_native_socket_handle());
       while (true)
       {
          co_await socket_pq.async_read_some(::boost::asio::null_buffers(),
-                                            boost::asio::deferred);
+                                            boost::cobalt::use_op);
          if (PQconsumeInput(conn) != 1)
          {
             throw ::std::runtime_error("Unable to consume input");
          }
          while (::PQisBusy(conn) == 0)
          {
-            ResultPtr result{PQgetResult(conn)};
-            if (not result)
-               co_return;
+            auto* const ptr = PQgetResult(conn);
+            if (ptr == nullptr)
+            {
+               co_return ResultPtr{nullptr};
+            }
+            ResultPtr result{ptr};
             co_yield ::std::move(result);
          }
       }
+      co_return ResultPtr{nullptr};
    }
 
-   boost::asio::experimental::coro<void, ResultPtr>
-       Connection::command_async(std::string_view command)
+   boost::cobalt::promise<ResultPtr> Connection::command_async(std::string_view command)
    {
       ResultPtr res;
       auto      op = commands_async(command);
       while (auto val = co_await op)
       {
-         if (not *val)
-         {
-            continue;
-         }
-         res = ::std::move(*val);
+         res = ::std::move(val);
       }
       co_return ::std::move(res);
    }
@@ -114,18 +120,12 @@ namespace PC::asiopq
       conn = PQconnectdb(std::data(connection_string));
    }
 
-   asiopq_socket Connection::socket()
-   {
-      auto const socket_fd = dup_native_socket_handle();
-      return asiopq_socket{get_executor(), {}, socket_fd};
-   }
-
    PGconn* Connection::native_handle()
    {
       return conn;
    }
 
-   boost::asio::experimental::coro<void>
+   boost::cobalt::promise<void>
        Connection::connect_async(std::string_view connection_string)
    {
       conn = PQconnectStart(std::data(connection_string));
@@ -156,21 +156,21 @@ namespace PC::asiopq
             // If Read, wait for PQ to read from Socket
             case PostgresPollingStatusType::PGRES_POLLING_READING:
             {
-               auto socket_pq = socket();
+               auto socket_pq = socket(dup_native_socket_handle());
                // Null buffers ensures we only wait
                // But do not end up reading anything
                co_await socket_pq.async_read_some(boost::asio::null_buffers{},
-                                                  boost::asio::deferred);
+                                                  boost::cobalt::use_op);
             }
             break;
             // If Write, wait for PQ to write to socket
             case PostgresPollingStatusType::PGRES_POLLING_WRITING:
             {
-               auto socket_pq = socket();
+               auto socket_pq = socket(dup_native_socket_handle());
                // Null buffers ensures we only wait
                // But do not end up reading anything
                co_await socket_pq.async_write_some(boost::asio::null_buffers{},
-                                                   boost::asio::deferred);
+                                                   boost::cobalt::use_op);
             }
             break;
          }

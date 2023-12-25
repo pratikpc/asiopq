@@ -1,22 +1,21 @@
 // lib.cpp : Defines the entry point for the application.
 //
 #include <asiopq/Connection.hpp>
-#include <boost/asio/any_io_executor.hpp>
-#include <boost/asio/awaitable.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
-#include <boost/asio/experimental/co_spawn.hpp>
-#include <boost/asio/this_coro.hpp>
-#include <boost/asio/use_awaitable.hpp>
+#include <boost/cobalt/async_for.hpp>
+#include <boost/cobalt/join.hpp>
+#include <boost/cobalt/run.hpp>
+#include <boost/cobalt/task.hpp>
+#include <boost/cobalt/this_coro.hpp>
 #include <iostream>
+#include <string>
+#include <vector>
 
-boost::asio::experimental::coro<void> DBConnect(::boost::asio::any_io_executor executor)
+boost::cobalt::task<void> DBConnect(::std::string                connection_string,
+                                    ::std::vector<::std::string> listens)
 {
    using PC::asiopq::ResultPtr;
-   std::string connection_string{
-       "postgresql://postgres:postgres@localhost:5432/postgres"};
    {
-      PC::asiopq::Connection connection{executor};
+      PC::asiopq::Connection connection{};
       co_await connection.connect_async(connection_string);
       if (connection.status() != ConnStatusType::CONNECTION_OK)
          co_return;
@@ -24,15 +23,16 @@ boost::asio::experimental::coro<void> DBConnect(::boost::asio::any_io_executor e
          auto init_reses = connection.commands_async(
              "DROP TABLE IF EXISTS TBL1;DROP TABLE IF EXISTS TBL2; CREATE TABLE IF NOT "
              "EXISTS TBL1 (i int4);CREATE TABLE IF NOT EXISTS TBL2 (i int4);");
-         while (auto res = co_await init_reses)
+         BOOST_COBALT_FOR(auto res, init_reses)
          {
-            if (not res.has_value())
+            if (not res)
             {
-               continue;
+               break;
             }
-            if (res->status() != PGRES_COMMAND_OK)
+            ::std::cout << "Received result " << res.status() << ::std::endl;
+            if (res.status() != PGRES_COMMAND_OK)
             {
-               std::cout << res->status() << " : " << res->error_msg() << "\n";
+               std::cout << res.status() << " : " << res.error_msg() << "\n";
                co_return;
             }
          }
@@ -66,16 +66,21 @@ boost::asio::experimental::coro<void> DBConnect(::boost::asio::any_io_executor e
          }
       }
       {
-         auto notifies = connection.await_notify_async("LISTEN TBL1;");
-         while (auto notify_item = co_await notifies)
+         for (auto const& listen : listens)
          {
-            std::cout << "Notify Rel " << (*notify_item)->relname << " "
-                      << (*notify_item)->extra << "\n";
+            ::std::string command = "LISTEN " + listen;
+            co_await connection.command_async(command);
+         }
+         auto notifies = connection.await_notify_async();
+         BOOST_COBALT_FOR(auto notify_item, notifies)
+         {
+            std::cout << "Notify Rel " << notify_item->relname << " "
+                      << notify_item->extra << "\n";
          }
       }
    }
    {
-      PC::asiopq::Connection connection{executor};
+      PC::asiopq::Connection connection{};
       connection.connect(connection_string);
       std::cout << std::boolalpha << "Success " << connection.error_msg()
                 << (connection.status() == ConnStatusType::CONNECTION_OK) << "\n";
@@ -83,12 +88,21 @@ boost::asio::experimental::coro<void> DBConnect(::boost::asio::any_io_executor e
    co_return;
 }
 
+boost::cobalt::task<void> DBConnect()
+{
+   ::std::vector<::boost::cobalt::task<void>> tasks;
+   std::string                                connection_string{
+       "postgresql://postgres:postgres@localhost:5432/postgres"};
+   tasks.push_back(
+       DBConnect(connection_string, ::std::vector<::std::string>{"tbl1", "tbl4"}));
+   tasks.push_back(
+       DBConnect(connection_string, ::std::vector<::std::string>{"tbl3", "tbl2"}));
+   co_return co_await ::boost::cobalt::join(tasks);
+}
+
 int main()
 {
-   boost::asio::io_context io_context;
-   boost::asio::experimental::co_spawn(DBConnect(io_context.get_executor()),
-                                       boost::asio::detached);
-   io_context.run();
+   boost::cobalt::run(DBConnect());
    return 0;
 }
 
