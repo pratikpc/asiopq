@@ -3,28 +3,30 @@
 
 #include <asiopq/Connection.hpp>
 #include <asiopq/NotifyPtr.hpp>
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/cobalt/async_for.hpp>
 #include <boost/cobalt/generator.hpp>
 #include <boost/cobalt/op.hpp>
 #include <boost/cobalt/promise.hpp>
+#include <boost/cobalt/this_coro.hpp>
 #include <boost/cobalt/this_thread.hpp>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 
 namespace PC::asiopq
 {
-
    namespace
    {
-      inline asiopq_socket socket(int const socket_fd)
+      inline auto create_socket(::boost::asio::any_io_executor executor,
+                                int const                      socket_fd)
       {
-         // auto const socket_fd = dup_native_socket_handle();
-         return asiopq_socket{boost::cobalt::this_thread::get_executor(), {}, socket_fd};
+         using Socket = Connection::SocketPtr::element_type;
+         return ::std::make_unique<Socket>(
+             ::std::move(executor), Socket::protocol_type{}, socket_fd);
       }
    } // namespace
-   Connection::Connection() : conn(nullptr) {}
-
    Connection::~Connection()
    {
       if (conn != nullptr)
@@ -50,11 +52,10 @@ namespace PC::asiopq
    }
    boost::cobalt::generator<NotifyPtr> Connection::await_notify_async()
    {
-      auto socket_pq = socket(dup_native_socket_handle());
       while (true)
       {
-         co_await socket_pq.async_read_some(::boost::asio::null_buffers(),
-                                            ::boost::cobalt::use_op);
+         co_await socket->async_read_some(::boost::asio::null_buffers(),
+                                          ::boost::cobalt::use_op);
          if (PQconsumeInput(conn) != 1)
          {
             throw ::std::runtime_error("Unable to consume input");
@@ -82,11 +83,10 @@ namespace PC::asiopq
       {
          throw ::std::invalid_argument("Send Query failed");
       }
-      auto socket_pq = socket(dup_native_socket_handle());
       while (true)
       {
-         co_await socket_pq.async_read_some(::boost::asio::null_buffers(),
-                                            boost::cobalt::use_op);
+         co_await socket->async_read_some(::boost::asio::null_buffers(),
+                                          boost::cobalt::use_op);
          if (PQconsumeInput(conn) != 1)
          {
             throw ::std::runtime_error("Unable to consume input");
@@ -156,21 +156,23 @@ namespace PC::asiopq
             // If Read, wait for PQ to read from Socket
             case PostgresPollingStatusType::PGRES_POLLING_READING:
             {
-               auto socket_pq = socket(dup_native_socket_handle());
+               socket = create_socket(co_await boost::cobalt::this_coro::executor,
+                                      dup_native_socket_handle());
                // Null buffers ensures we only wait
                // But do not end up reading anything
-               co_await socket_pq.async_read_some(boost::asio::null_buffers{},
-                                                  boost::cobalt::use_op);
+               co_await socket->async_read_some(boost::asio::null_buffers{},
+                                                boost::cobalt::use_op);
             }
             break;
             // If Write, wait for PQ to write to socket
             case PostgresPollingStatusType::PGRES_POLLING_WRITING:
             {
-               auto socket_pq = socket(dup_native_socket_handle());
+               socket = create_socket(co_await boost::cobalt::this_coro::executor,
+                                      dup_native_socket_handle());
                // Null buffers ensures we only wait
                // But do not end up reading anything
-               co_await socket_pq.async_write_some(boost::asio::null_buffers{},
-                                                   boost::cobalt::use_op);
+               co_await socket->async_write_some(boost::asio::null_buffers{},
+                                                 boost::cobalt::use_op);
             }
             break;
          }

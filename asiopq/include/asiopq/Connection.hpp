@@ -1,4 +1,4 @@
-// lib.h : Include file for standard system include files,
+﻿// lib.h : Include file for standard system include files,
 // or project specific include files.
 
 #pragma once
@@ -7,6 +7,7 @@
 #include <boost/cobalt/generator.hpp>
 #include <boost/cobalt/promise.hpp>
 #include <libpq-fe.h>
+#include <memory>
 #include <string_view>
 
 #include <asiopq/NotifyPtr.hpp>
@@ -14,18 +15,16 @@
 
 namespace PC::asiopq
 {
-   namespace
-   {
-      using boost::asio::local::stream_protocol;
-      using asiopq_socket = stream_protocol::socket;
-   } // namespace
    struct Connection
    {
+    public:
+      using SocketPtr = ::std::unique_ptr<boost::asio::local::stream_protocol::socket>;
+
     private:
-      PGconn* conn;
+      PGconn*   conn   = nullptr;
+      SocketPtr socket = nullptr;
 
     public:
-      Connection();
       ~Connection();
 
       void                         connect(std::string_view connection_string);
