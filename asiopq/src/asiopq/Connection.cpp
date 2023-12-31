@@ -278,6 +278,10 @@ namespace PC::asiopq
          if (sz == 0)
          {
             co_await wait_for_read_async();
+            if (PQconsumeInput(conn) != 1)
+            {
+               throw ::std::runtime_error("Unable to consume input");
+            }
             continue;
          }
          if (not result)
