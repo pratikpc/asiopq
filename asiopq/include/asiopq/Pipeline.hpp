@@ -28,13 +28,24 @@ namespace PC::asiopq
       /// @note This waits for the pipeline to complete
       ::boost::cobalt::generator<ResultPtr> async_wait();
 
+      auto& conn() noexcept
+      {
+         return connection;
+      }
+      auto const& conn() const noexcept
+      {
+         return connection;
+      }
+
       Connection* operator->()
       {
-         return &connection;
+         auto& conn_ref = conn();
+         return &conn_ref;
       }
       Connection const* operator->() const
       {
-         return &connection;
+         auto& conn_ref = conn();
+         return &conn_ref;
       }
 
     private:
