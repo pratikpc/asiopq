@@ -1,4 +1,4 @@
-﻿// lib.h : Include file for standard system include files,
+// lib.h : Include file for standard system include files,
 // or project specific include files.
 
 #pragma once
@@ -32,7 +32,7 @@ namespace PC::asiopq
       {
          return &connection;
       }
-      Connection* operator->() const
+      Connection const* operator->() const
       {
          return &connection;
       }
