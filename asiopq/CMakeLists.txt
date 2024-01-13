@@ -21,6 +21,8 @@ target_sources(${PROJECT_NAME}
 	PRIVATE
 	include/asiopq/Connection.hpp
 	src/asiopq/Connection.cpp
+	include/asiopq/Exception.hpp
+	src/asiopq/Exception.cpp
 	include/asiopq/ResultPtr.hpp
 	src/asiopq/ResultPtr.cpp
 	include/asiopq/ValuePtr.hpp

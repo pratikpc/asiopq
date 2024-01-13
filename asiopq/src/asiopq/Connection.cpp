@@ -2,6 +2,7 @@
 //
 
 #include <asiopq/Connection.hpp>
+#include <asiopq/Exception.hpp>
 #include <asiopq/NotifyPtr.hpp>
 #include <asiopq/PQMemory.hpp>
 #include <asiopq/ResultPtr.hpp>
@@ -43,7 +44,7 @@ namespace PC::asiopq
          auto const res = co_await command_async(command);
          if (not res)
          {
-            throw ::std::invalid_argument("Unable to run the Notify command");
+            throw asiopq::Exception{*this, res};
          }
       }
       auto op = await_notify_async();
@@ -60,7 +61,7 @@ namespace PC::asiopq
          co_await wait_for_read_async();
          if (PQconsumeInput(conn) != 1)
          {
-            throw ::std::runtime_error("Unable to consume input");
+            throw asiopq::Exception{*this};
          }
          while (true)
          {
@@ -69,7 +70,7 @@ namespace PC::asiopq
                break;
             if (PQconsumeInput(conn) != 1)
             {
-               throw ::std::runtime_error("Unable to consume input");
+               throw asiopq::Exception{*this};
             }
             co_yield result;
          }
@@ -84,7 +85,7 @@ namespace PC::asiopq
          co_await wait_for_read_async();
          if (PQconsumeInput(conn) != 1)
          {
-            throw ::std::runtime_error("Unable to consume input");
+            throw asiopq::Exception{*this};
          }
          while (::PQisBusy(conn) == 0)
          {
@@ -106,7 +107,7 @@ namespace PC::asiopq
       // Returns 1 on success
       if (PQsendQuery(conn, std::data(command)) != 1)
       {
-         throw ::std::invalid_argument("Send Query failed");
+         throw asiopq::Exception{*this};
       }
       auto op = wait_for_response();
       BOOST_COBALT_FOR(auto res, op)
@@ -121,12 +122,12 @@ namespace PC::asiopq
       // Returns 1 on success
       if (PQsendQuery(conn, std::data(command)) != 1)
       {
-         throw ::std::invalid_argument("Send Query failed");
+         throw asiopq::Exception{*this};
       }
       // Returns 1 on success
       if (::PQsetSingleRowMode(conn) != 1)
       {
-         throw ::std::invalid_argument("Set Single Row Mode failed");
+         throw asiopq::Exception{*this};
       }
       auto op = wait_for_response();
       BOOST_COBALT_FOR(auto res, op)
@@ -169,7 +170,7 @@ namespace PC::asiopq
    {
       conn = PQconnectStart(std::data(connection_string));
       if (status() == ConnStatusType::CONNECTION_BAD)
-         co_return;
+         throw asiopq::Exception{*this};
       while (true)
       {
          // Make a poll to PQ
@@ -180,17 +181,13 @@ namespace PC::asiopq
             {
                if (::PQsetnonblocking(conn, 1) != 0)
                {
-                  throw ::std::runtime_error("Unable to switch to Non-Blocking mode");
+                  throw asiopq::Exception{*this};
                }
                co_return;
             }
             case PostgresPollingStatusType::PGRES_POLLING_FAILED:
             {
-               if (::PQsetnonblocking(conn, 1) != 0)
-               {
-                  throw ::std::runtime_error("Unable to switch to Non-Blocking mode");
-               }
-               co_return;
+               throw asiopq::Exception{*this};
             }
             // If Read, wait for PQ to read from Socket
             case PostgresPollingStatusType::PGRES_POLLING_READING:
@@ -223,14 +220,14 @@ namespace PC::asiopq
       // Returns 1 on success
       if (PQsendQuery(conn, std::data(command)) != 1)
       {
-         throw ::std::invalid_argument("Send Query failed");
+         throw asiopq::Exception{*this};
       }
       while (true)
       {
          co_await wait_for_read_async();
          if (PQconsumeInput(conn) != 1)
          {
-            throw ::std::runtime_error("Unable to consume input");
+            throw asiopq::Exception{*this};
          }
          while (::PQisBusy(conn) == 0)
          {
@@ -250,16 +247,12 @@ namespace PC::asiopq
          auto result = co_await exec_cmmand_without_completion_wait(command);
          if (result.status() != PGRES_COPY_OUT)
          {
-            throw ::std::runtime_error("Copy Command executed in wrong mode");
+            throw asiopq::Exception{*this};
          }
       }
       using Result = PQMemory<char>;
       while (true)
       {
-         // if (PQconsumeInput(conn) != 1)
-         // {
-         //    throw ::std::runtime_error("Unable to consume input");
-         // }
          Result     result;
          auto const sz = PQgetCopyData(native_handle(), result.ref_ptr(), true /*Async*/);
          /// @note A result of -1 indicates the copy is over
@@ -272,7 +265,7 @@ namespace PC::asiopq
          /// @note https://www.postgresql.org/docs/current/libpq-copy.html
          if (sz == -2)
          {
-            throw ::std::runtime_error("Unable to copy data");
+            throw asiopq::Exception{*this};
          }
          /// @note Returns 0 in async if no data is available for immediate return
          if (sz == 0)
@@ -280,7 +273,7 @@ namespace PC::asiopq
             co_await wait_for_read_async();
             if (PQconsumeInput(conn) != 1)
             {
-               throw ::std::runtime_error("Unable to consume input");
+               throw asiopq::Exception{*this};
             }
             continue;
          }
@@ -297,7 +290,7 @@ namespace PC::asiopq
             co_await wait_for_read_async();
          if (PQconsumeInput(conn) != 1)
          {
-            throw ::std::runtime_error("Unable to consume input");
+            throw asiopq::Exception{*this};
          }
          while (::PQisBusy(conn) == 0)
          {

@@ -1,10 +1,10 @@
 #include <asiopq/Connection.hpp>
+#include <asiopq/Exception.hpp>
 #include <asiopq/Pipeline.hpp>
 #include <asiopq/ResultPtr.hpp>
 #include <boost/cobalt/generator.hpp>
 #include <boost/cobalt/op.hpp>
 #include <libpq-fe.h>
-#include <stdexcept>
 
 namespace PC::asiopq
 {
@@ -27,7 +27,7 @@ namespace PC::asiopq
    {
       if (auto const res = ::PQpipelineSync(connection.native_handle()); res != 1)
       {
-         throw ::std::runtime_error("Pipeline Synchronisation failed");
+         throw asiopq::Exception{*this};
       }
       bool continue_to_loop = true;
       while (continue_to_loop)
@@ -35,7 +35,7 @@ namespace PC::asiopq
          co_await (*this)->wait_for_read_async();
          if (PQconsumeInput((*this)->native_handle()) != 1)
          {
-            throw ::std::runtime_error("Unable to consume input");
+            throw asiopq::Exception{*this};
          }
          while (::PQisBusy((*this)->native_handle()) == 0)
          {

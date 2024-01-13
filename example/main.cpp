@@ -1,6 +1,7 @@
 // lib.cpp : Defines the entry point for the application.
 //
 #include <asiopq/Connection.hpp>
+#include <asiopq/Exception.hpp>
 #include <asiopq/Pipeline.hpp>
 #include <boost/cobalt/async_for.hpp>
 #include <boost/cobalt/join.hpp>
@@ -18,8 +19,6 @@ boost::cobalt::task<void> DBConnect(::std::string                connection_stri
    {
       PC::asiopq::Connection connection{};
       co_await connection.connect_async(connection_string);
-      if (connection.status() != ConnStatusType::CONNECTION_OK)
-         co_return;
       {
          auto init_reses = connection.commands_async(
              "DROP TABLE IF EXISTS TBL1;DROP TABLE IF EXISTS TBL2; CREATE TABLE IF NOT "
@@ -33,8 +32,7 @@ boost::cobalt::task<void> DBConnect(::std::string                connection_stri
             ::std::cout << "Received result " << res.status() << ::std::endl;
             if (res.status() != PGRES_COMMAND_OK)
             {
-               std::cout << res.status() << " : " << res.error_msg() << "\n";
-               co_return;
+               throw ::PC::asiopq::Exception(connection, res);
             }
          }
          std::cout << "Create was a success\n";
@@ -42,18 +40,17 @@ boost::cobalt::task<void> DBConnect(::std::string                connection_stri
       {
          auto const insert_res =
              co_await connection.command_async("INSERT INTO TBL1 VALUES(25)");
-         std::cout << static_cast<bool>(insert_res) << " => " << insert_res.status()
-                   << " : " << connection.error_msg() << " : " << insert_res.error_msg()
-                   << "\n";
          if (not insert_res or insert_res.status() != PGRES_COMMAND_OK)
-            co_return;
+         {
+            throw ::PC::asiopq::Exception(connection, insert_res);
+         }
          std::cout << "Insert was a success\n";
       }
       {
          ::PC::asiopq::Pipeline pipeline{connection};
          if (not pipeline.enter())
          {
-            throw ::std::runtime_error("Unable to enter Pipeline mode");
+            throw ::PC::asiopq::Exception{pipeline};
          }
          for (::std::size_t i = 0; i < 20; ++i)
          {
@@ -67,7 +64,7 @@ boost::cobalt::task<void> DBConnect(::std::string                connection_stri
                                   nullptr,
                                   0) != 1)
             {
-               throw ::std::invalid_argument("Send Query failed");
+               throw ::PC::asiopq::Exception{pipeline};
             }
          }
          auto init_reses = pipeline.async_wait();
@@ -79,9 +76,7 @@ boost::cobalt::task<void> DBConnect(::std::string                connection_stri
             }
             if (res.status() != PGRES_COMMAND_OK)
             {
-               std::cout << "Pipeline  ERROR " << res.status() << " : " << res.error_msg()
-                         << " : " << pipeline->error_msg() << "\n";
-               co_return;
+               throw ::PC::asiopq::Exception{pipeline, res};
             }
          }
          std::cout << "Pipeline Insert was a success\n";
@@ -90,12 +85,12 @@ boost::cobalt::task<void> DBConnect(::std::string                connection_stri
          auto const result_set = co_await connection.command_async("SELECT * from TBL1");
          if (not result_set)
          {
-            ::std::cerr << "Select from Result set failed " << result_set.error_msg()
-                        << ::std::endl;
-            co_return;
+            throw ::PC::asiopq::Exception{connection, result_set};
          }
          if (result_set.status() != PGRES_TUPLES_OK)
-            co_return;
+         {
+            throw ::PC::asiopq::Exception{connection, result_set};
+         }
          auto const row_count = result_set.row_count();
          std::cout << "Select table Row Count" << row_count << "\n";
          for (int row = 0; row < row_count; ++row)
@@ -128,7 +123,7 @@ boost::cobalt::task<void> DBConnect(::std::string                connection_stri
             }
             else
             {
-               throw ::std::runtime_error("Unable to process data");
+               throw ::PC::asiopq::Exception{connection, result_set};
             }
          }
       }
